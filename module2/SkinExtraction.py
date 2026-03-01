@@ -10,9 +10,9 @@ from tensorflow.keras.models import load_model
 # Add Module1 to path
 sys.path.append("../module1")
 
-from CameraModule import CameraModule
-from FaceCropping import FaceCropping
-from SkinMasking import SkinMasking
+from module1 import CameraModule
+from module1 import FaceCropping
+from module1 import SkinMasking
 
 
 class SkinExtraction:
