@@ -1,17 +1,11 @@
 """
 SkinToneGenerator.py
 Generates synthetic skin tone profiles using CIELAB color space
-and visualizes distribution using Seaborn
 """
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
-
-# Set seaborn theme
-sns.set_theme(style="whitegrid", context="talk")
 
 
 class SkinToneGenerator:
@@ -43,38 +37,104 @@ class SkinToneGenerator:
     
     def generate_dataset(self):
         """
-        Generate synthetic skin tone dataset
-        
+        Generate synthetic skin tone dataset using stratified sampling
+        to ensure balanced sub-groups in the final pipeline output
+
         Returns:
             pandas DataFrame with columns: L, a, b, MST_Class, Undertone
         """
-        print(f"Generating {self.n_samples} synthetic skin tone profiles...")
-        
-        # Sample L*, a*, b* values
-        L_values = np.random.uniform(self.L_min, self.L_max, self.n_samples)
-        a_values = np.random.uniform(self.a_min, self.a_max, self.n_samples)
-        b_values = np.random.uniform(self.b_min, self.b_max, self.n_samples)
-        
-        # Create DataFrame
-        df = pd.DataFrame({
-            'L': L_values,
-            'a': a_values,
-            'b': b_values
-        })
-        
-        # Map Monk Skin Tone (MST) classes based on L* value
+        print(f"Generating {self.n_samples} synthetic skin tone profiles using stratified sampling...")
+
+        # Define sub-group L* boundaries (matching ShadeRangeEngine.py)
+        subgroup_buckets = [
+            # Warm undertones
+            ('Warm', 30, 45, 'Deep Coral'),
+            ('Warm', 45, 60, 'True Coral'),
+            ('Warm', 60, 72, 'Warm Nude'),
+            ('Warm', 72, 85, 'Peachy Nude'),
+
+            # Cool undertones
+            ('Cool', 30, 45, 'Deep Berry'),
+            ('Cool', 45, 58, 'True Berry'),
+            ('Cool', 58, 70, 'Cool Mauve'),
+            ('Cool', 70, 85, 'Soft Pink'),
+
+            # Neutral undertones
+            ('Neutral', 30, 45, 'True Red'),
+            ('Neutral', 45, 58, 'Blue Red'),
+            ('Neutral', 58, 70, 'Dusty Rose'),
+            ('Neutral', 70, 85, 'Taupe Nude'),
+        ]
+
+        # Calculate records per sub-group
+        records_per_subgroup = self.n_samples // 12
+        remainder = self.n_samples % 12
+
+        print(f"Target records per sub-group: {records_per_subgroup}")
+        if remainder > 0:
+            print(f"Distributing {remainder} extra records across first {remainder} buckets")
+
+        # Generate stratified samples
+        all_samples = []
+        bucket_counts = {}
+
+        for i, (undertone, L_min, L_max, subgroup_name) in enumerate(subgroup_buckets):
+            # Calculate exact count for this bucket
+            bucket_size = records_per_subgroup + (1 if i < remainder else 0)
+
+            # Generate L* values within this bucket's range
+            L_values = np.random.uniform(L_min, L_max, bucket_size)
+
+            # Generate a* and b* values across full valid ranges
+            a_values = np.random.uniform(self.a_min, self.a_max, bucket_size)
+            b_values = np.random.uniform(self.b_min, self.b_max, bucket_size)
+
+            # Create DataFrame for this bucket
+            bucket_df = pd.DataFrame({
+                'L': L_values,
+                'a': a_values,
+                'b': b_values,
+                'Undertone': [undertone] * bucket_size  # Assign undertone deterministically
+            })
+
+            all_samples.append(bucket_df)
+            bucket_counts[f"{undertone} ({L_min}-{L_max})"] = bucket_size
+
+        # Concatenate all buckets
+        df = pd.concat(all_samples, ignore_index=True)
+
+        # Assign MST classes based on L* values
         df['MST_Class'] = self._assign_mst_class(df['L'])
-        
-        # Derive undertone from a*/b* ratio
-        df['Undertone'] = self._derive_undertone(df['a'], df['b'])
-        
+
+        # Shuffle the dataset to avoid ordering by sub-group
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
         print(f"Dataset generated: {len(df)} samples")
-        print(f"\nUndertone distribution:")
-        print(df['Undertone'].value_counts())
+
+        # Print stratification validation
+        print(f"\nStratification validation:")
+        print("Records per undertone-L* bucket:")
+        for bucket_name, count in bucket_counts.items():
+            print(f"  {bucket_name}: {count}")
+
+        # Check for imbalance
+        min_count = min(bucket_counts.values())
+        max_count = max(bucket_counts.values())
+        if max_count - min_count > 1:
+            print(f"WARNING: Bucket imbalance detected! Min: {min_count}, Max: {max_count}")
+        else:
+            print("PASS: All buckets balanced (differ by at most 1)")
+
+        # Print overall undertone distribution
+        print(f"\nOverall undertone distribution:")
+        undertone_counts = df['Undertone'].value_counts().sort_index()
+        print(undertone_counts)
+
         print(f"\nMST Class distribution:")
         print(df['MST_Class'].value_counts().sort_index())
-        
+
         return df
+
     
     def _assign_mst_class(self, L_values):
         """
@@ -119,106 +179,7 @@ class SkinToneGenerator:
         
         return pd.Series(undertones)
     
-    def visualize_dataset(self, df):
-        """
-        Generate visualizations of the synthetic dataset
-        
-        Args:
-            df: pandas DataFrame with skin tone data
-        """
-        print("\nGenerating visualizations...")
-        
-        # Graph A: a* vs b* scatter plot with undertone hue
-        self._plot_ab_scatter(df)
-        
-        # Graph B: L* histogram with MST class hue
-        self._plot_L_histogram(df)
-        
-        print("Visualizations complete")
-    
-    def _plot_ab_scatter(self, df):
-        """Generate a* vs b* scatter plot colored by undertone"""
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
-        
-        # Define color palette for undertones
-        palette = {
-            'Warm': '#FF6B35',    # Orange-red
-            'Cool': '#4ECDC4',    # Cyan-blue
-            'Neutral': '#95B46A'  # Olive-green
-        }
-        
-        sns.scatterplot(
-            data=df,
-            x='a',
-            y='b',
-            hue='Undertone',
-            palette=palette,
-            alpha=0.6,
-            s=50,
-            edgecolor='none',
-            ax=ax
-        )
-        
-        ax.set_xlabel('a* (Green-Red Axis)', fontsize=14)
-        ax.set_ylabel('b* (Blue-Yellow Axis)', fontsize=14)
-        ax.set_title('Skin Tone Distribution: a* vs b* by Undertone', fontsize=16, pad=20)
-        ax.legend(title='Undertone', fontsize=12, title_fontsize=13)
-        ax.grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        plt.savefig(f"{self.output_path}/ab_scatter_undertone.png", dpi=300, bbox_inches='tight')
-        plt.savefig(f"{self.output_path}/ab_scatter_undertone.svg", bbox_inches='tight')
-        plt.close()
-        
-        print(f"Saved: {self.output_path}/ab_scatter_undertone.png")
-        print(f"Saved: {self.output_path}/ab_scatter_undertone.svg")
-    
-    def _plot_L_histogram(self, df):
-        """Generate L* histogram colored by MST class"""
-        fig, ax = plt.subplots(figsize=(14, 8), dpi=300)
-        
-        # Convert MST_Class to string for proper categorical handling
-        df_plot = df.copy()
-        df_plot['MST_Class_str'] = df_plot['MST_Class'].astype(str)
-        
-        # Use seaborn color palette for MST classes
-        palette = sns.color_palette("Spectral", n_colors=10)
-        
-        sns.histplot(
-            data=df_plot,
-            x='L',
-            hue='MST_Class_str',
-            palette=palette,
-            multiple="stack",
-            bins=30,
-            edgecolor='white',
-            linewidth=0.5,
-            ax=ax,
-            legend=True
-        )
-        
-        ax.set_xlabel('L* (Lightness)', fontsize=14)
-        ax.set_ylabel('Count', fontsize=14)
-        ax.set_title('Skin Tone Distribution: L* by Monk Skin Tone Class', fontsize=16, pad=20)
-        
-        # Update legend title
-        handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles, labels, title='MST Class', fontsize=10, title_fontsize=12, ncol=2)
-        ax.grid(True, alpha=0.3, axis='y')
-        
-        # Add vertical lines for MST class boundaries
-        bins = np.linspace(self.L_min, self.L_max, 11)
-        for bin_edge in bins[1:-1]:
-            ax.axvline(bin_edge, color='gray', linestyle='--', alpha=0.3, linewidth=1)
-        
-        plt.tight_layout()
-        plt.savefig(f"{self.output_path}/L_histogram_mst.png", dpi=300, bbox_inches='tight')
-        plt.savefig(f"{self.output_path}/L_histogram_mst.svg", bbox_inches='tight')
-        plt.close()
-        
-        print(f"Saved: {self.output_path}/L_histogram_mst.png")
-        print(f"Saved: {self.output_path}/L_histogram_mst.svg")
-    
+
     def save_dataset(self, df, filename="synthetic_skin_tones.csv"):
         """
         Save dataset to CSV
@@ -240,7 +201,7 @@ def main():
     print("=" * 70)
     
     # Initialize generator
-    generator = SkinToneGenerator(n_samples=1000, random_state=42)
+    generator = SkinToneGenerator(n_samples=3000, random_state=42)
     
     # Generate dataset
     df = generator.generate_dataset()
@@ -248,9 +209,6 @@ def main():
     # Display sample data
     print("\nSample data (first 10 rows):")
     print(df.head(10).to_string(index=False))
-    
-    # Generate visualizations
-    generator.visualize_dataset(df)
     
     # Save dataset
     generator.save_dataset(df)

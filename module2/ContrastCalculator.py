@@ -5,12 +5,7 @@ Calculates perceptual contrast between skin tone and reference lip color using D
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
-
-# Set seaborn theme
-sns.set_theme(style="whitegrid", context="talk")
 
 
 # Reference lip color in LAB space
@@ -21,11 +16,11 @@ REFERENCE_LIP_LAB = {
 }
 
 
-def load_skin_profiles(filepath="output/skin_profiles_with_type.csv"):
+def load_skin_profiles(filepath="output/skin_profiles_with_texture.csv"):
     """Load the skin profiles dataset"""
     if not os.path.exists(filepath):
         print(f"ERROR: File not found: {filepath}")
-        print("Please run SkinTypesGenerator.py first!")
+        print("Please run SkinTextureGenerator.py first!")
         return None
     
     df = pd.read_csv(filepath)
@@ -105,92 +100,6 @@ def categorize_contrast(df, method='qcut'):
     return df, bins
 
 
-def plot_delta_e_distribution(df, bins, output_path="output"):
-    """Plot histogram of Delta E distribution with bin boundaries"""
-    fig, ax = plt.subplots(figsize=(12, 7), dpi=300)
-    
-    # Plot histogram
-    ax.hist(df['Delta_E'], bins=30, color='steelblue', alpha=0.7, edgecolor='black')
-    
-    # Add vertical lines for bin boundaries
-    if len(bins) > 2:
-        # For qcut, bins has 4 values (edges)
-        ax.axvline(bins[1], color='orange', linestyle='--', linewidth=2, 
-                  label=f'Low/Medium boundary ({bins[1]:.2f})')
-        ax.axvline(bins[2], color='red', linestyle='--', linewidth=2,
-                  label=f'Medium/High boundary ({bins[2]:.2f})')
-    
-    ax.set_xlabel('Delta E (Perceptual Distance)', fontsize=14)
-    ax.set_ylabel('Frequency', fontsize=14)
-    ax.set_title('Distribution of Delta E: Skin Tone vs Reference Lip Color', 
-                fontsize=16, pad=20)
-    ax.legend(fontsize=11)
-    ax.grid(True, alpha=0.3, axis='y')
-    
-    # Add reference lip color info
-    lip_text = f"Reference Lip LAB: L*={REFERENCE_LIP_LAB['L']}, a*={REFERENCE_LIP_LAB['a']}, b*={REFERENCE_LIP_LAB['b']}"
-    ax.text(0.98, 0.97, lip_text, transform=ax.transAxes,
-           fontsize=10, verticalalignment='top', horizontalalignment='right',
-           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    
-    plt.tight_layout()
-    
-    png_path = os.path.join(output_path, "delta_e_distribution.png")
-    svg_path = os.path.join(output_path, "delta_e_distribution.svg")
-    
-    plt.savefig(png_path, dpi=300, bbox_inches='tight')
-    plt.savefig(svg_path, bbox_inches='tight')
-    plt.close()
-    
-    print(f"\nSaved: {png_path}")
-    print(f"Saved: {svg_path}")
-
-
-def plot_delta_e_by_mst(df, output_path="output"):
-    """Plot boxplot of Delta E by Monk Skin Tone class"""
-    fig, ax = plt.subplots(figsize=(14, 8), dpi=300)
-    
-    # Create boxplot
-    palette = sns.color_palette("Spectral", n_colors=10)
-    
-    sns.boxplot(
-        data=df,
-        x='MST_Class',
-        y='Delta_E',
-        palette=palette,
-        ax=ax
-    )
-    
-    ax.set_xlabel('Monk Skin Tone Class', fontsize=14)
-    ax.set_ylabel('Delta E (Perceptual Distance)', fontsize=14)
-    ax.set_title('Delta E Distribution by Monk Skin Tone Class', fontsize=16, pad=20)
-    ax.grid(True, alpha=0.3, axis='y')
-    
-    # Add horizontal line for mean
-    mean_delta_e = df['Delta_E'].mean()
-    ax.axhline(mean_delta_e, color='red', linestyle='--', linewidth=1.5,
-              label=f'Overall Mean ({mean_delta_e:.2f})')
-    ax.legend(fontsize=11)
-    
-    # Add annotation
-    annotation = ("Validation: Higher/lower MST classes should show correlation\n"
-                 "with contrast against reference lip color")
-    fig.text(0.5, 0.02, annotation, ha='center', fontsize=10,
-            style='italic', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
-    
-    plt.tight_layout()
-    
-    png_path = os.path.join(output_path, "delta_e_by_mst.png")
-    svg_path = os.path.join(output_path, "delta_e_by_mst.svg")
-    
-    plt.savefig(png_path, dpi=300, bbox_inches='tight')
-    plt.savefig(svg_path, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Saved: {png_path}")
-    print(f"Saved: {svg_path}")
-
-
 def analyze_contrast_by_mst(df):
     """Analyze relationship between MST class and contrast level"""
     print("\n" + "=" * 70)
@@ -260,17 +169,12 @@ def main():
     print("\n[STEP 3] Sample Data (first 10 rows):")
     print(df[['L', 'a', 'b', 'MST_Class', 'Delta_E', 'Contrast_Level']].head(10).to_string(index=False))
     
-    # Generate visualizations
-    print("\n[STEP 4] Generating Visualizations...")
-    plot_delta_e_distribution(df, bins, output_path)
-    plot_delta_e_by_mst(df, output_path)
-    
     # Analyze relationships
-    print("\n[STEP 5] Analyzing Relationships...")
+    print("\n[STEP 4] Analyzing Relationships...")
     analyze_contrast_by_mst(df)
     
     # Save dataset
-    print("\n[STEP 6] Saving Enriched Dataset...")
+    print("\n[STEP 5] Saving Enriched Dataset...")
     save_dataset(df, output_path)
     
     print("\n" + "=" * 70)
