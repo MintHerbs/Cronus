@@ -73,9 +73,9 @@ class CameraModule:
         ry = right_eye.y * frame_height
         nx = nose_tip.x  * frame_width
 
-        roll          = np.degrees(np.arctan2(ry - ly, rx - lx))
-        eye_center_x  = (lx + rx) / 2
-        yaw           = (nx - eye_center_x) / (frame_width / 2) * 30
+        roll         = np.degrees(np.arctan2(ry - ly, rx - lx))
+        eye_center_x = (lx + rx) / 2
+        yaw          = (nx - eye_center_x) / (frame_width / 2) * 30
         return yaw, roll
 
     def get_face_bounding_box(self, landmarks, frame_width, frame_height):
@@ -114,9 +114,11 @@ class CameraModule:
             if not success:
                 break
 
+            # Save a clean copy BEFORE any drawing happens
+            clean_frame = frame.copy()
+
             frame_h, frame_w = frame.shape[:2]
 
-            # Convert to MediaPipe Image
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_image  = mp.Image(
                 image_format=mp.ImageFormat.SRGB,
@@ -151,6 +153,8 @@ class CameraModule:
                     if not large_enough:  msgs.append("Move closer")
                     status_text = " | ".join(msgs)
 
+                # Draw on `frame` only — for display purposes
+                # clean_frame stays untouched
                 cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), box_color, 2)
 
             current_time = time.time()
@@ -160,10 +164,11 @@ class CameraModule:
                 elif current_time - self.aligned_start_time >= self.STABLE_DURATION:
                     timestamp = int(time.time())
                     filename  = f"{self.output_path}/capture_{timestamp}.jpg"
-                    cv2.imwrite(filename, frame)
+                    # Use clean_frame — no rectangle or text drawn on it
+                    cv2.imwrite(filename, clean_frame)
                     print(f"Captured: {filename}")
                     self.captured       = True
-                    self.captured_frame = frame.copy()
+                    self.captured_frame = clean_frame
                     self.captured_bbox  = bbox
                     break
                 else:
@@ -172,6 +177,7 @@ class CameraModule:
             else:
                 self.aligned_start_time = None
 
+            # Draw status text on `frame` only — for display purposes
             cv2.putText(frame, status_text, (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
             cv2.imshow("Camera Module", frame)
